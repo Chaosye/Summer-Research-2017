@@ -1,0 +1,14 @@
+
+
+6/5
+Duties of Week One:
+- Annotated bibliography
+- Implement Dijkstra's
+  + Test on toy dataset
+  + Post to GS
+  + Explain to Anna & Ibrahim how Dijkstra's works!
+src is the programs that you write
+bin is the executable for compiled programs
+interactome - all human proteins, connected through their interactions
+write down the commands you do to use your program!
+- Trying to learn GitHub!
