@@ -27,6 +27,7 @@
 #Initialize variables:
 #Variables initialized.
 
+#Pulls in GraphSpace package from packages folder
 import sys
 sys.path.insert(0, '/afs/reed.edu/user/n/i/nicegan/Desktop/Summer-Research-2017/packages')
 

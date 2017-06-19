@@ -1,0 +1,33 @@
+Guide to Installing Packages onto the Comp Bio Lab Computers
+=================
+=== Using pip ===
+=================
+1. Modify your original "pip install package_name" into...
+"pip install --user package_name"
+for example: "pip install --user graphspace_python"
+
+This will install the package into your $HOME/.local/lib/python3.4/site-packages directory.
+
+--
+2. Navigate to the $HOME/.local/ directory/lib/python3.4/site-packages directory, and copy your package into the same directory as your python file.  On these computers, the $HOME directory should be accessible by clicking on Home in the file manager.*
+*You will need to turn on "View Hidden Files" in your file manager program to see .local.
+
+
+for example:
+/python code directory/
+--program.py (that has a line saying "import graphspace_python")
+--/graphspace_python
+
+This lets your python file use that package, since it searches the directory its currently in for items to import.
+
+--
+3*. If you would like to access a package that is in a different directory, or access the package from your file directly without moving it, use this code at the top of your file:
+"
+import sys
+sys.path.insert(0, '/the/path/to/the/folder/holding/**package_name**')
+
+import package_name
+"
+where the path originates from the directory /asf.  This code adds a path for your code to check for packages that it might import.  It's easiest to navigate to the folder where the package is, and then copy the file path from the top of your file manager program.
+
+--

@@ -1,0 +1,13 @@
+README
+setup.cfg
+setup.py
+firebrowse/__init__.py
+firebrowse/fbcore.py
+firebrowse/fbget.py
+firebrowse/fbmap.py
+firebrowse/fbwrappers.py
+firebrowse.egg-info/PKG-INFO
+firebrowse.egg-info/SOURCES.txt
+firebrowse.egg-info/dependency_links.txt
+firebrowse.egg-info/entry_points.txt
+firebrowse.egg-info/top_level.txt
