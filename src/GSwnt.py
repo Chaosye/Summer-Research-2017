@@ -40,7 +40,7 @@ def main():
     fileText = fileReader("Wnt-nodes.txt", True)
     fileNodes = NetPath_nodeGenerator(fileText)
 
-    NetPath_GraphSpace(filePathways, fileNodes, "Wnt Pathway", "The Wnt pathway, uplaoded to GraphSpace and generated using NetPath data.")
+    NetPath_GraphSpace(filePathways, fileNodes, "Wnt Pathway (NetPath)", "The Wnt pathway, uploaded to GraphSpace and generated using NetPath data.", "Common", None)
 
     return
 
@@ -104,7 +104,7 @@ def NetPath_nodeGenerator(fileText):
     for row in range(len(fileText)):
         for col in range(3):
             colNode.append(fileText[row][col])
-            print("colNode is:", colNode)
+            #print("colNode is:", colNode)
         genNode.append(colNode)
         colNode = []
 
@@ -116,10 +116,16 @@ def NetPath_nodeGenerator(fileText):
 
     return genNode
 
-def NetPath_GraphSpace(genPathway, genNode, graphName, graphDescription):
-     # Input: Array of arrays containing concatenated data from a NetPath-edges.txt file in the format of [Input, Output, Pathway type]
+def NetPath_GraphSpace(genPathway, genNode, graphName, graphDescription, nameChoice, nodeAnnotation):
+     # Input: Array of arrays containing concatenated data from a NetPath-edges.txt file in the format of [Input, Output, Pathway type].  nameChoice is either "Uniprot" or "Common" to determine what the name of the nodes are.
      # As well as a concatenated NetPath-nodes.txt files with additional information for node type.
      # Process: Create nodes with graphical information using NetPath-nodes.txt, and then connect them with graphically detailed connections from the edges information.
+
+     #Initializing Uniprot <-> Common name dictionary
+     namedict = {}
+     for entries in range(len(genNode)):
+         namedict[genNode[entries][0]] = genNode[entries][2]
+         namedict[genNode[entries][2]] = genNode[entries][0]
 
      #Initializing Graph
      from graphspace_python.graphs.classes.gsgraph import GSGraph
@@ -128,20 +134,33 @@ def NetPath_GraphSpace(genPathway, genNode, graphName, graphDescription):
      G.set_data(data={'description': graphDescription}) #Applies graph description
      #Graph initialized
      for nodecounter in range(len(genNode)):
-        node = genNode[nodecounter][0]
+        if nameChoice == "Uniprot":
+            node = genNode[nodecounter][0]
+        elif nameChoice == "Common":
+            node = genNode[nodecounter][2]
         node_symbol = genNode[nodecounter][1]
 
-        G.add_node(node, popup = "sample node popup", label = node)
+        print("THE NODE ANNOTATION IS:", nodeAnnotation[(node + "weightedavg")]) #DB
+        #Adding the node
+        if nodeAnnotation == None:
+            G.add_node(node, popup = "sample node popup", label = node)
+        elif nodeAnnotation != None:
+            G.add_node(node, popup = ("On a scale of 0 to 1, the weighted average of mRNA sequencing activity of this gene compared to all other genes in this pathway is: " + str(nodeAnnotation[(node + "weightedavg")])), label = node) # Adds an annotation using data gathered from fbget
+
+        #Adding style to the node
         if node_symbol == "tf":
             G.add_node_style(node, shape = 'vee', color = 'green', width = 90, height = 90)
         elif node_symbol == "receptor":
             G.add_node_style(node, shape = 'rectangle', color = 'red', width = 90, height = 90)
         else:
             G.add_node_style(node, shape = 'ellipse', color = 'yellow', width = 90, height = 90)
-
      for edgecounter in range(len(genPathway)):
-        node1 = genPathway[edgecounter][0]
-        node2 = genPathway[edgecounter][1]
+        if nameChoice == "Uniprot":
+            node1 = genPathway[edgecounter][0]
+            node2 = genPathway[edgecounter][1]
+        elif nameChoice == "Common":
+            node1 = namedict[genPathway[edgecounter][0]]
+            node2 = namedict[genPathway[edgecounter][1]]
         edgetype = genPathway[edgecounter][2]
 
         if edgetype == "Phosphorylation":
