@@ -19,9 +19,9 @@
 ##\\(1) get ONE TYPE of data from ONE TYPE of cancer from the API
 ## mRNAseq data from COAD
 ##(2) get the data for every NODE (scaled/normalized to [0,1] (p-value?))
-### Weight mRNAseq data by their z-scores
+### Normaliz mRNAseq data by their z-scores
 ##(3) "map" the data to the NetPath nodes (NP nodes are in the UniProtID)
-### Use the weighted data to produce a color gradient from white to red of their significance, as well as possibly line thickness and shape size.
+### Use the normalized data to produce a color gradient from white to red of their significance, as well as possibly line thickness and shape size.
 ##(4) annotate graph with this info.
 ### Possibly for MAF (Mutation Annotation Format) data,
 ##(5) post to GS
@@ -36,9 +36,9 @@
 #Initializing packages...
 import sys
 import fnmatch
-from GSwnt import fileReader, NetPath_pathwayGenerator, NetPath_nodeGenerator, NetPath_GraphSpace
-#Pulling in packages
-#sys.path.insert(0, '/afs/reed.edu/user/n/i/nicegan/Desktop/Summer-Research-2017/packages')
+from utils import rgb_to_hex, UniProtID_Common_Dictionary
+from NetPathProcessor import fileReader, NetPath_pathwayGenerator, NetPath_nodeGenerator, NetPath_GraphSpace
+#Pulling in packages from the packages directory.
 sys.path.insert(0, '../packages')
 import firebrowse
 from firebrowse import fbget
@@ -68,12 +68,13 @@ def main():
         fileNodes = NetPath_nodeGenerator(fileText) #Processes fileText into a format of [Uniprot ID, node type, Common name]
         fileText = fileReader((pathways[paths] + "-edges.txt"), True)
         filePathways = NetPath_pathwayGenerator(fileText)
-
+        print("filePathways: ", filePathways) #DB
         #print(fileNodes)
         nodedata.update(fbget_PerPathwayInfo(fileNodes)) #Produces the dictionary holding unprocessed and processed data for each node.
+        nodedata.update(lineWeighter(filePathways, nodedata, "normalizedavg", namedict))
 
-        NetPath_GraphSpace(filePathways, fileNodes, ("(Full Pathway Version) " + pathways[paths] + "Pathway (NetPath with fbget data)"), "The "+ pathways[paths] + " pathway, uploaded to GraphSpace and generated using NetPath data.", "Common", nodedata, namedict)
-    #print(nodedata["BTRCweightedavg"]) #DB
+        NetPath_GraphSpace(filePathways, fileNodes, ("(Full Pathway Version) " + pathways[paths] + "Pathway (NetPath with fbget data)"), "The "+ pathways[paths] + " pathway, uploaded to GraphSpace and generated using NetPath data.", "Common", nodedata, namedict, "FullPathway")
+    #print(nodedata["BTRCnormalizedavg"]) #DB
 
     ##Other options for fbget analysis below
     #fbget.maf(gene="wnt3", cohort="coad") #Collapsible nodes? popup panel that links to other graphs.  Note that exporting graphs of laid out nodes saves location of nodes, and so you can copy graph layouts between each other.
@@ -90,7 +91,7 @@ def fbget_PerPathwayInfo(pathwayNodes):
 
     #Initialize variables
     pathwaydict = {} #Holds all the fbget information per node in a dictionary.  Processed information is accessible by "[Node][output]" - which is the node, and the type of information in one string.
-    valuesToBeWeighted = []
+    valuesToBeNormalized = []
     #Variables initialized.
 
     for node in range(len(pathwayNodes)):
@@ -98,21 +99,16 @@ def fbget_PerPathwayInfo(pathwayNodes):
         print("The node currently being read from fbget is: "+ pathwayNodes[node][2])
         fbget_Output = fbget_Reader(fbget.mrnaseq(gene=pathwayNodes[node][2], cohort="coad"), {3})
         #Nodes in a pathway, and then eventually nodes for an entire type of cancer on the pathways it has been seen to affect.
-        value = fbget_PreWeighting(fbget_Output)
+        value = fbget_PreNormalizing(fbget_Output)
         pathwaydict[pathwayNodes[node][2]] = fbget_Output
         pathwaydict[(pathwayNodes[node][2]) + "unchangedvalue"] = value
-        # pathwaydict[(pathwayNodes[node][2]) + "weightedvalue"] = weightedvalue
-        # pathwaydict[(pathwayNodes[node][2]) + "avg"] = avg
-        # pathwaydict[(pathwayNodes[node][2]) + "weightedavg"] = weightedavg
-        # pathwaydict[(pathwayNodes[node][2]) + "huevalue"] = huevalue
 
-        #e.g. To access WNT7's weightedavg, use the value "pathwaydict["WNT7weightedavg"]""
-    smallBigValues = fbget_PathwayWeighting(pathwaydict)
+    smallBigValues = fbget_PathwayNormalizing(pathwaydict)
     for node in range(len(pathwayNodes)):
-        print("The node currently being weighted is: "+ pathwayNodes[node][2])
-        pathwaydict.update(fbget_NodeWeighting(pathwayNodes[node][2], pathwaydict, smallBigValues))
-    pathwaydict.update(hueWeighter(pathwaydict))
-    #print(pathwaydict["WNT7Aweightedavg"])  #DB
+        print("The node currently being normalized is: "+ pathwayNodes[node][2])
+        pathwaydict.update(fbget_NodeNormalizing(pathwayNodes[node][2], pathwaydict, smallBigValues))
+    pathwaydict.update(hueNormalizer(pathwaydict))
+    #print(pathwaydict["WNT7Anormalizedavg"])  #DB
 
     return pathwaydict
 
@@ -151,145 +147,153 @@ def fbget_Reader(fbget_Output, chosencolumns):
     #print(type(rows[0][0])) #DB for unicode encoding to ascii
     return rows
 
-def fbget_PreWeighting(fbget_Output):
+def fbget_PreNormalizing(fbget_Output):
     #Input: An array, containing the info of a text file separated by col internally and then line from fbget file.
     #Process: Turns strings into floats.
     #Ouput:
 
     #Initialize variables:
-    valuesToBeWeighted = [] #Single array of values to be weighted in a range
-    weightedValues = [] #Array of values after being weighted in a range
-    smallestValue = 0.0
-    biggestValue = 0.0
-    huevalue = 0
+    valuesToBeNormalized = [] #Single array of values to be normalized in a range
+    normalizedValues = [] #Array of values after being normalized in a range
     #Variables initialized.
 
     #The loop below pulls the values out of a row & col format and puts them into a single layer array.
     for row in range(len(fbget_Output)):
         for col in range(len(fbget_Output[0])):
             fbget_Output[row][col] = float(fbget_Output[row][col])
-            valuesToBeWeighted.append(fbget_Output[row][col])
-            #print("PreWeight's valuesToBeWeighted are: ", valuesToBeWeighted)
-    #Done!
-    #print(valuesToBeWeighted) #DB
+            valuesToBeNormalized.append(fbget_Output[row][col])
+            #print("PreNormalize's valuesToBeNormalized are: ", valuesToBeNormalized)
+    #print(valuesToBeNormalized) #DB
+    return valuesToBeNormalized
 
-
-    return valuesToBeWeighted
-
-def fbget_PathwayWeighting(pathwaydict):
+def fbget_PathwayNormalizing(pathwaydict):
     #Input: Every value frome every node as part of a dictionary
     #Process: Takes every single value from each node in an entire pathway by reading in the pathway's nodes from pathwaydict.keys() and finds the min/max of them so that each value can be scaled from the same [0,1] scale once returning to the node.
     #Ouput: Minimum value, maximum value.
 
     #Initialize variables:
-    valuesToBeWeighted = [] #Single array of values to be weighted in a range for all nodes
+    valuesToBeNormalized = [] #Single array of values to be normalized in a range for all nodes
     smallestValue = 0.0
     biggestValue = 0.0
-    huevalue = 0
-    currentnode = None
     #Variables initialized.
 
     l = pathwaydict.keys()
-    keysToBeWeighted = fnmatch.filter(l, "*unchangedvalue")
-    print("The keys being looked at are: ", keysToBeWeighted)
-    for keys in range(len(keysToBeWeighted)):
-        for items in range(len(keysToBeWeighted[0])):
-            valuesToBeWeighted.append(pathwaydict[keysToBeWeighted[keys]][items])
+    keysToBeNormalized = fnmatch.filter(l, "*unchangedvalue")
+    print("The keys being looked at are: ", keysToBeNormalized)
+    for keys in range(len(keysToBeNormalized)):
+        for items in range(len(keysToBeNormalized[0])):
+            valuesToBeNormalized.append(pathwaydict[keysToBeNormalized[keys]][items])
 
-    #Overall weighting of values below from [0,1]
-    smallestValue = min(valuesToBeWeighted)
-    biggestValue = max(valuesToBeWeighted)
+    #Overall normalizing of values below from [0,1]
+    smallestValue = min(valuesToBeNormalized)
+    biggestValue = max(valuesToBeNormalized)
     #print("big = ", biggestValue, " small = ", smallestValue, " diff = ", difference, "avg = ", avg) #DB
 
     #Function where (max-min)/(max-min) = 1, (min-min) = 0, and so (x-min)/(max-min)is less than 1.  Therefore normalizing to a range of [0,1]
-    print("An example of a value to be weighted is: ", valuesToBeWeighted[1])
+    print("An example of a value to be normalized is: ", valuesToBeNormalized[1])
     print("Smallest value is: ", smallestValue)
     print("Biggest value is: ", biggestValue)
 
     smallBigValues = [smallestValue, biggestValue]
 
     print("Done!")
-    #print(weightedValues) #DB
 
     return smallBigValues
 
-def fbget_NodeWeighting(nodeName, pathwaydict, smallBigValues):
-    #Input: An array, containing the info of a text file separated by col internally and then line from fbget file.
-    #Process: Turns strings into floats.
+def fbget_NodeNormalizing(nodeName, pathwaydict, smallBigValues):
+    #Input:
+    #Process:
     #Ouput:
 
     #Initialize variables:
-    valuesToBeWeighted = [] #Single array of values to be weighted in a range for this specific node
+    valuesToBeNormalized = [] #Single array of values to be normalized in a range for this specific node
     smallestValue = smallBigValues[0] #Smallest value of all nodes in the pathway
     biggestValue = smallBigValues[1] #Biggest value of all nodes in the pathway
-    huevalue = 0
-    pathwaydict[nodeName + "weightedvalue"] = []
-    pathwaydict[nodeName + "weightedavg"] = 0
+    pathwaydict[nodeName + "normalizedvalue"] = [] #Contains the node's normalized values, crunched down to [0, 1]
+    pathwaydict[nodeName + "normalizedavg"] = 0 #Creates an average number for values of the node, after being normalized across the full pathway's values.
+    #e.g. To access WNT7's normalizedavg, use the value "pathwaydict["WNT7normalizedavg"]""
 
     #Variables initialized.
 
-    valuesToBeWeighted = (pathwaydict[nodeName + "unchangedvalue"])
-    #print("The valuesToBeWeighted are ", valuesToBeWeighted)
-    for entry in range(len(valuesToBeWeighted)):
-        pathwaydict[nodeName + "weightedvalue"].append((valuesToBeWeighted[entry]-smallestValue)/(biggestValue - smallestValue))
-    print("The weighted values are ", pathwaydict[nodeName + "weightedvalue"])
-    pathwaydict[nodeName + "weightedavg"] = sum(pathwaydict[nodeName + "weightedvalue"])/len(pathwaydict[nodeName + "weightedvalue"])
-    print("The weighted average is ", pathwaydict[nodeName + "weightedavg"])
-
-
+    valuesToBeNormalized = (pathwaydict[nodeName + "unchangedvalue"])
+    #print("The valuesToBeNormalized are ", valuesToBeNormalized)
+    for entry in range(len(valuesToBeNormalized)):
+        #Takes for each node, scales down all values to fit within the pathway's min/max values using this function:
+        # y= (x - min)/(max-min)
+        # since (max-min)/(max-min) = 1, turning the first value into a smaller number pushes the result into a range of [0,1]
+        pathwaydict[nodeName + "normalizedvalue"].append((valuesToBeNormalized[entry]-smallestValue)/(biggestValue - smallestValue))
+    print("The normalized values are ", pathwaydict[nodeName + "normalizedvalue"])
+    pathwaydict[nodeName + "normalizedavg"] = sum(pathwaydict[nodeName + "normalizedvalue"])/len(pathwaydict[nodeName + "normalizedvalue"])
+    print("The normalized average is ", pathwaydict[nodeName + "normalizedavg"])
 
     return pathwaydict
 
-def hex_to_rgb(value):
-    """Return (red, green, blue) for the color given as #rrggbb."""
-    value = value.lstrip('#')
-    lv = len(value)
-    return tuple(int(value[i:i + lv // 3], 16) for i in range(0, lv, lv // 3))
+def hueNormalizer(pathwaydict):
+    #Input:
+    #Processes:
+    #Output:
+    #Initialize variables:
+    #Variables initialized.
 
-def rgb_to_hex(red, green, blue):
-    """Return color as #rrggbb for the given color values."""
-    return '#%02x%02x%02x' % (red, green, blue)
-
-def hueWeighter(pathwaydict):
-    huesToBeWeighted = []
+    huesToBeNormalized = []
     l = pathwaydict.keys()
-    keysToBeWeighted = fnmatch.filter(l, "*weightedavg")
-    print("The keys being looked at are: ", keysToBeWeighted)
-    for keys in range(len(keysToBeWeighted)):
-        huesToBeWeighted.append(pathwaydict[keysToBeWeighted[keys]])
-    print("The huesToBeWeighted are: ", huesToBeWeighted)
+    keysToBeNormalized = fnmatch.filter(l, "*normalizedavg")
+    print("The keys being looked at are: ", keysToBeNormalized)
+    for keys in range(len(keysToBeNormalized)):
+        huesToBeNormalized.append(pathwaydict[keysToBeNormalized[keys]])
+    print("The huesToBeNormalized are: ", huesToBeNormalized)
 
-    largestavg = max(huesToBeWeighted)
-    smallestavg = min(huesToBeWeighted)
+    largestavg = max(huesToBeNormalized)
+    smallestavg = min(huesToBeNormalized)
 
     print("The largest hue avg is: ", largestavg, " and the smallest is: ", smallestavg)
 
-    for entry in range(len(huesToBeWeighted)):
-        print("The node being looked at is: ", keysToBeWeighted[entry].replace("weightedavg", "weightedhueavg"))
+    for entry in range(len(huesToBeNormalized)):
+        print("The node being looked at is: ", keysToBeNormalized[entry].replace("normalizedavg", "normalizedhueavg"))
 
-        print("The huesToBeWeightedp[entry] is: ", huesToBeWeighted[entry])
+        print("The huesToBeNormalizedp[entry] is: ", huesToBeNormalized[entry])
 
-        pathwaydict[keysToBeWeighted[entry].replace("weightedavg", "weightedhueavg")] = (huesToBeWeighted[entry]-smallestavg)/(largestavg - smallestavg)
+        pathwaydict[keysToBeNormalized[entry].replace("normalizedavg", "normalizedhueavg")] = (huesToBeNormalized[entry]-smallestavg)/(largestavg - smallestavg)
 
-        print("The hue pre-processing values are: ", pathwaydict[keysToBeWeighted[entry].replace("weightedavg","weightedhueavg")], "and ints they are: ", int(255-(255*pathwaydict[keysToBeWeighted[entry].replace("weightedavg","weightedhueavg")])))
+        print("The hue pre-processing values are: ", pathwaydict[keysToBeNormalized[entry].replace("normalizedavg","normalizedhueavg")], "and ints they are: ", int(255-(255*pathwaydict[keysToBeNormalized[entry].replace("normalizedavg","normalizedhueavg")])))
 
-        pathwaydict[keysToBeWeighted[entry].replace("weightedavg", "huevalue")] = rgb_to_hex(255, int(255-(255*pathwaydict[keysToBeWeighted[entry].replace("weightedavg","weightedhueavg")])), int(255-(255*pathwaydict[keysToBeWeighted[entry].replace("weightedavg","weightedhueavg")])))
+        pathwaydict[keysToBeNormalized[entry].replace("normalizedavg", "huevalue")] = rgb_to_hex(255, int(255-(255*pathwaydict[keysToBeNormalized[entry].replace("normalizedavg","normalizedhueavg")])), int(255-(255*pathwaydict[keysToBeNormalized[entry].replace("normalizedavg","normalizedhueavg")])))
 
     return pathwaydict
 
-def UniProtID_Common_Dictionary():
-    #Input: Reads from "human-gene-map.txt"
-    #Process: Processes the text file, pulling the first and last columns, and making entries of each other.
-    #Ouput: Dictionary with keys of both UniProtID and Common names for genes, with entries of each other.
+def lineWeighter(filePathways, pathwaydict, measuredVariable, namedict):
+    #Input: The pathway dictionary, with all associated data.
+    #Processes: Compares the values between a node and every other node, and assigns a value from [0, 100] based on their similarity.  0. is not the same at all, while 100 is is identical.  This information is passed on to a dictionary that is consulted by the GraphSpace portion of the program that uses this info to change line weight.
+    #Output: Provides a dictionary full of floats, used to alter the line weight between nodes as assigned in GraphSpace.
+    #Initialize variables:
+    smallestValue = 0
+    biggestValue = 0
+    maxDifference = 0
+    edgeList = []
+    valuesToBeWeighted = []
+    l = pathwaydict.keys()
+    keysToBeWeighted = fnmatch.filter(l, ("*" + measuredVariable))
+    #pathwaydict[node1 + node2 + "lineweight"]
+    #Variables initialized.
 
-    namedict = {}
+    print("The keys being looked at for line weighting: ", keysToBeWeighted)
+    for keys in range(len(keysToBeWeighted)):
+        valuesToBeWeighted.append(pathwaydict[keysToBeWeighted[keys]])
+    biggestValue = max(valuesToBeWeighted)
+    smallestValue = min(valuesToBeWeighted)
+    maxDifference = biggestValue - smallestValue
 
-    namedatabase = fileReader("human-gene-map.txt", True)
-    for names in range(len(namedatabase)):
-        namedict[namedatabase[names][0]] = namedatabase[names][len(namedatabase[names])-1]
-        namedict[namedatabase[names][len(namedatabase[names])-1]] = namedatabase[names][0]
-    print(namedict)
-    return namedict
+    for edges in range(len(filePathways)):
+        node1 = namedict[filePathways[edges][0]]
+        node1val = pathwaydict[node1 + measuredVariable]
+        node2 = namedict[filePathways[edges][1]]
+        node2val = pathwaydict[node2 + measuredVariable]
+        edge = node1 + node2 #String of both nodes concatenated
+        lineweight = 0.1/(abs(node1val - node2val)/maxDifference)
+        pathwaydict[node1 + node2 + "lineweight"] = lineweight
+        print("The lineweight for" + node1 + node2 + "will be", lineweight)
+
+    return pathwaydict
 
 if __name__ == '__main__':
     main()
