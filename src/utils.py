@@ -49,4 +49,37 @@ def fileReader(fileName, separatecols):
     #print(lineList) #DB
 
     return lineList
+    
+def fileWriter(fileName, textOutput):
+    #Input: Takes a text ouput from something, and then writes it directly into a file.
+    target = open(fileName, 'w')
+    target.truncate()
+    target.write(textOutput)
+    target.close()
+    return
+
+def normalizeValues(valRange, valArray):
+    #Input: Reads in a desired range for values to placed in, and a single layer array.
+    #Process: First performs the function where x is an array of values:
+    # f(x) = (x - min(x))/(max(x) - min(x))  #Which normalizes to a range of [0,1]
+    # If a different range is desired, then the function reads valRange as [x,y]:
+    # where range = y - x
+    # f(a) = (a * range) + x  #Which normalizes to the range [x,y]
+    #Ouput: Dictionary with keys of both UniProtID and Common names for genes, with entries of each other.
+    normalizedArray = []
+    tempArray = []
+    maxDifference = max(valArray) - min(valArray)
+    for x in range(len(valArray)):
+        normalizedArray.append(1-((valArray[x] - min(valArray))/maxDifference))
+    if valRange != [0,1]:
+        print("Desired lineweight range is not [0,1]. It is ", valRange)
+        tempArray = normalizedArray
+        normalizedArray = []
+        normalDifference = max(valRange) - min(valRange)
+
+        for a in range(len(valArray)):
+            normalizedArray.append((tempArray[a]*normalDifference) + min(valRange))
+    print("The final normalizedArray is: ", normalizedArray) #DB
+    return normalizedArray
+
 ###

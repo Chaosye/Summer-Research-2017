@@ -1,0 +1,23 @@
+Nick Egan - Poster Layout 7/24
+Determining Possible Nodes of Influence in Cancer Signaling Pathways
+
+Sec. 1:
+- Brief overview of computational biology in the realm of cancer research
+- Overview of direct predecessors to this project, such as PathLinker and Firehose/Firebrowse.
+
+Sec. 2:
+- Overview of the function of this program.
+
+Sec. 3:
+- Step by step outline with mathematical functions/figures of the processes of this program.
+
+Sec. 4:
+- Example data, and GraphSpace results.
+- Short description of how to read GraphSpace results.
+
+Sec. 5:
+- Applications of this program, and possibilities for further development.
+
+Handouts:
+- TeX'd outline of the program's math.
+- Print-out of the program in it's entirety.

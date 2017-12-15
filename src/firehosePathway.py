@@ -36,7 +36,8 @@
 #Initializing packages...
 import sys
 import fnmatch
-from utils import rgb_to_hex, UniProtID_Common_Dictionary
+import re
+from utils import rgb_to_hex, UniProtID_Common_Dictionary, normalizeValues
 from NetPathProcessor import fileReader, NetPath_pathwayGenerator, NetPath_nodeGenerator, NetPath_GraphSpace
 #Pulling in packages from the packages directory.
 sys.path.insert(0, '../packages')
@@ -62,18 +63,23 @@ def main():
     '''
     namedict = UniProtID_Common_Dictionary()
     pathways = ["Wnt"]
+    source = "TieDIE"
+    #source = "NetPath"
 
     for paths in range(len(pathways)):
         fileText = fileReader((pathways[paths] + "-nodes.txt"), True) #Reads in the -node.txt NetPath file for a particular pathway in pathways.
         fileNodes = NetPath_nodeGenerator(fileText) #Processes fileText into a format of [Uniprot ID, node type, Common name]
-        fileText = fileReader((pathways[paths] + "-edges.txt"), True)
-        filePathways = NetPath_pathwayGenerator(fileText)
+        if source == "TieDIE":
+            fileText = fileReader(("tiedie.sif"), True)
+        else:
+            fileText = fileReader((pathways[paths] + "-edges.txt"), True)
+        filePathways = NetPath_pathwayGenerator(fileText, source)
         print("filePathways: ", filePathways) #DB
         #print(fileNodes)
         nodedata.update(fbget_PerPathwayInfo(fileNodes)) #Produces the dictionary holding unprocessed and processed data for each node.
         nodedata.update(lineWeighter(filePathways, nodedata, "normalizedavg", namedict))
 
-        NetPath_GraphSpace(filePathways, fileNodes, ("(Full Pathway Version) " + pathways[paths] + "Pathway (NetPath with fbget data)"), "The "+ pathways[paths] + " pathway, uploaded to GraphSpace and generated using NetPath data.", "Common", nodedata, namedict, "FullPathway")
+        NetPath_GraphSpace(filePathways, fileNodes, ("(TieDIE Version) " + pathways[paths] + "Pathway (NetPath with fbget data)"), "The "+ pathways[paths] + " pathway, uploaded to GraphSpace and generated using NetPath data.", "Common", nodedata, namedict, "FullPathway")
     #print(nodedata["BTRCnormalizedavg"]) #DB
 
     ##Other options for fbget analysis below
@@ -222,7 +228,7 @@ def fbget_NodeNormalizing(nodeName, pathwaydict, smallBigValues):
         # y= (x - min)/(max-min)
         # since (max-min)/(max-min) = 1, turning the first value into a smaller number pushes the result into a range of [0,1]
         pathwaydict[nodeName + "normalizedvalue"].append((valuesToBeNormalized[entry]-smallestValue)/(biggestValue - smallestValue))
-    print("The normalized values are ", pathwaydict[nodeName + "normalizedvalue"])
+    #print("The normalized values are ", pathwaydict[nodeName + "normalizedvalue"]) #DB
     pathwaydict[nodeName + "normalizedavg"] = sum(pathwaydict[nodeName + "normalizedvalue"])/len(pathwaydict[nodeName + "normalizedvalue"])
     print("The normalized average is ", pathwaydict[nodeName + "normalizedavg"])
 
@@ -255,7 +261,7 @@ def hueNormalizer(pathwaydict):
 
         pathwaydict[keysToBeNormalized[entry].replace("normalizedavg", "normalizedhueavg")] = (huesToBeNormalized[entry]-smallestavg)/(largestavg - smallestavg)
 
-        print("The hue pre-processing values are: ", pathwaydict[keysToBeNormalized[entry].replace("normalizedavg","normalizedhueavg")], "and ints they are: ", int(255-(255*pathwaydict[keysToBeNormalized[entry].replace("normalizedavg","normalizedhueavg")])))
+        #print("The hue pre-processing values are: ", pathwaydict[keysToBeNormalized[entry].replace("normalizedavg","normalizedhueavg")], "and ints they are: ", int(255-(255*pathwaydict[keysToBeNormalized[entry].replace("normalizedavg","normalizedhueavg")])))  #DB
 
         pathwaydict[keysToBeNormalized[entry].replace("normalizedavg", "huevalue")] = rgb_to_hex(255, int(255-(255*pathwaydict[keysToBeNormalized[entry].replace("normalizedavg","normalizedhueavg")])), int(255-(255*pathwaydict[keysToBeNormalized[entry].replace("normalizedavg","normalizedhueavg")])))
 
@@ -263,7 +269,7 @@ def hueNormalizer(pathwaydict):
 
 def lineWeighter(filePathways, pathwaydict, measuredVariable, namedict):
     #Input: The pathway dictionary, with all associated data.
-    #Processes: Compares the values between a node and every other node, and assigns a value from [0, 100] based on their similarity.  0. is not the same at all, while 100 is is identical.  This information is passed on to a dictionary that is consulted by the GraphSpace portion of the program that uses this info to change line weight.
+    #Processes: Compares the values between a node and every other node for a measuredVariable, and then normalized to the range [0.1,5] based on the similarity of the two values.  Greater similarity means a greater value..  This information is passed on to a dictionary that is consulted by the GraphSpace portion of the program that uses this info to change line weight.
     #Output: Provides a dictionary full of floats, used to alter the line weight between nodes as assigned in GraphSpace.
     #Initialize variables:
     smallestValue = 0
@@ -273,26 +279,45 @@ def lineWeighter(filePathways, pathwaydict, measuredVariable, namedict):
     valuesToBeWeighted = []
     l = pathwaydict.keys()
     keysToBeWeighted = fnmatch.filter(l, ("*" + measuredVariable))
+    edgesToBeWeighted = []
     #pathwaydict[node1 + node2 + "lineweight"]
     #Variables initialized.
 
     print("The keys being looked at for line weighting: ", keysToBeWeighted)
     for keys in range(len(keysToBeWeighted)):
         valuesToBeWeighted.append(pathwaydict[keysToBeWeighted[keys]])
+    print("The valuesToBeWeighted are: ", valuesToBeWeighted)
     biggestValue = max(valuesToBeWeighted)
     smallestValue = min(valuesToBeWeighted)
     maxDifference = biggestValue - smallestValue
 
+    #For determing differences in values between nodes in an edge.
     for edges in range(len(filePathways)):
         node1 = namedict[filePathways[edges][0]]
         node1val = pathwaydict[node1 + measuredVariable]
-        node2 = namedict[filePathways[edges][1]]
+        node2 = namedict[filePathways[edges][2]]  #1 normally, 2 for TieDIE
         node2val = pathwaydict[node2 + measuredVariable]
         edge = node1 + node2 #String of both nodes concatenated
-        lineweight = 0.1/(abs(node1val - node2val)/maxDifference)
+        lineweight = abs(node1val - node2val)
         pathwaydict[node1 + node2 + "lineweight"] = lineweight
-        print("The lineweight for" + node1 + node2 + "will be", lineweight)
+        print("The intermediary lineweight for" + node1 + node2 + "will be", lineweight)
 
+    #For normalizing the values of all edge difference between a scale of [0.1, 10]
+    measuredVariable = "lineweight"
+    valuesToBeWeighted = []
+    l = pathwaydict.keys()
+    edgesToBeWeighted = fnmatch.filter(l, "*lineweight")
+    tempEdgeValues = []
+    tempEdgeHolder = []
+
+    for edges in range(len(edgesToBeWeighted)):
+        tempEdgeHolder.append(edgesToBeWeighted[edges])
+        tempEdgeValues.append(pathwaydict[tempEdgeHolder[edges]])
+    print("The tempEdgeValues are: ", tempEdgeValues)
+    tempEdgeValues = normalizeValues([0.1,10], tempEdgeValues)
+    for edges in range(len(edgesToBeWeighted)):
+        pathwaydict[tempEdgeHolder[edges]] = tempEdgeValues[edges]
+        print("The values in pathwaydict for ", tempEdgeHolder[edges]," are ", pathwaydict[tempEdgeHolder[edges]])
     return pathwaydict
 
 if __name__ == '__main__':

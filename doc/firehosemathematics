@@ -1,0 +1,37 @@
+Process and math of the firehose program!
+
+====================================================
+
+Ver 0.2 (with real statistics):
+1. Read in nodes and edges, link together pathway.
+
+2. Produce information dictionary, e.g. for mRNA sequencing activity.
+  2a. Pulls raw data per gene from fbget.
+  2b. Let set X {x1, x2 ... xn} be all information within a node for a particular variable from fbget.
+  Let set N {n1, n2 ... nn} be all nodes within a pathway.
+  Let set P {p1, p2 ... pn} be all pathways being considered.
+
+3. Within set X, isolate paired cases based on patient ID and look for differential expression.
+Multiple cases of the same patient appears within one pull from fbget, and this allows direct comparison of a single patient's expression change in normal tissue to tumorous tissue.  (NT vs TP for normal vs tumor data. e.g. x1 and x5 may be from the same patient, but x1 will be labeled as NT, and x5 as TP)
+  3a. Perform a t-test per protein on the above data, comparing the means between the pool of normal tissue and the pool of tumorous tissues.  For stronger differences, produce a stronger hue change in GraphSpace.
+  3b. Do this for all nodes in set N.
+
+4. Determine if any proteins are co-expressed.  Is there a linear correlation between protein expression in this particular type of cancer?
+  4a. Have greater correlation produce thicker lines in GraphSpace
+
+5. Repeat for all pathways in set P.
+
+6. Upload to GraphSpace.
+
+====================================================
+Ver 0.1:
+1. Read in nodes and edges, link together pathway.
+2. Produce information dictionary, e.g. for mRNA sequencing activity.
+-2a. Pulls raw data per gene from fbget.
+-2b. Find least active and most active sample across whole pathway, normalized to [0 and 1] respectively.
+-2c. Normalize all samples for all nodes to be within this range
+-2d. Let set X {x1, x2 ... xn} be all information within a node for a particular variable from fbget.
+     Let set N {n1, n2 ... nn} be all nodes within a pathway.
+     Let set P {p1, p2 ... pn} be all pathways being considered.
+-2e. Find x̅ for each n for all P.  Hue intensifies with mean.
+-2f. Upload to GraphSpace

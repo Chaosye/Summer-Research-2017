@@ -29,7 +29,8 @@
 
 #Pulls in GraphSpace package from packages folder
 import sys
-sys.path.insert(0, '/afs/reed.edu/user/n/i/nicegan/Desktop/Summer-Research-2017/packages')
+import re
+#sys.path.insert(0, '../packages')
 
 import graphspace_python
 
@@ -61,13 +62,13 @@ def fileReader(fileName, separatecols):
     lineList = lineString.split('\n') ## Split the string by line
     if separatecols == True:
         for pattern in range(len(lineList)):
+            lineList[pattern] = lineList[pattern].strip('\r')
             lineList[pattern] = lineList[pattern].split('\t')  ## Split the list by col
-
     #print(lineList) #DB
 
     return lineList
 
-def NetPath_pathwayGenerator(fileText):
+def NetPath_pathwayGenerator(fileText, source):
     #Input: An array, containing the info of a text file separated by col internally and then line from a NetPath-edges.txt file.
     #Process: Takes the node and edge information of this text file, in the format of Wnt-edges.txt, so it will take the columns 0, 1, 5
     #Ouput: A smaller array, this time with only useful node and edge information
@@ -77,8 +78,16 @@ def NetPath_pathwayGenerator(fileText):
     genPathway = [] # Final generated pathway in format of [input, output, edge type]
     #Variables initialized.
     for row in range(len(fileText)):
-        for col in range(8):
-            if col in [0, 1, 5]: # If in the columns containing the info we want...
+        for col in range((len(fileText[row]))):
+            #print("The entry in colPathway[", row, "][", col, "] is :", fileText[row][col])
+            if source == "TieDIE" and col in [0, 2]: # If in the columns containing the info we want...
+                print("Append.")
+                colPathway.append(fileText[row][col]) # Append onto the overall array
+                #print("colPathway is:", colPathway) #DB
+            elif source != "TieDIE" and col in [0, 1, 5]:
+                colPathway.append(fileText[row][col]) # Append onto the overall array
+                #print("colPathway is:", colPathway) #DB
+            if source == "TieDIE" and col in [1]: # If in the columns containing the info we want...
                 colPathway.append(fileText[row][col]) # Append onto the overall array
                 #print("colPathway is:", colPathway) #DB
         genPathway.append(colPathway)
@@ -121,7 +130,6 @@ def NetPath_GraphSpace(genPathway, genNode, graphName, graphDescription, nameCho
      # As well as a concatenated NetPath-nodes.txt files with additional information for node type.
      # Process: Create nodes with graphical information using NetPath-nodes.txt, and then connect them with graphically detailed connections from the edges information.
 
-     #Initializing Uniprot <-> Common name dictionary
 
      #Initializing Graph
      from graphspace_python.graphs.classes.gsgraph import GSGraph
@@ -129,6 +137,8 @@ def NetPath_GraphSpace(genPathway, genNode, graphName, graphDescription, nameCho
      G.set_name(graphName) #Applies name to graph
      G.set_data(data={'description': graphDescription}) #Applies graph description
      #Graph initialized
+
+     #Initializing Uniprot <-> Common name dictionary
      for nodecounter in range(len(genNode)):
         if nameChoice == "Uniprot":
             node = genNode[nodecounter][0]
@@ -143,12 +153,16 @@ def NetPath_GraphSpace(genPathway, genNode, graphName, graphDescription, nameCho
             datatype = "normalizedhueavg"
         elif analysisType == "Node":
             datatype = "normalizedavg"
+        elif analysisType == "T-test":
+            datatype = "tsignificance"
         print("THE NODE ANNOTATION IS:", nodeAnnotation[(node + datatype)]) #DB
 
         if nodeAnnotation == None:
             G.add_node(node, popup = "sample node popup", label = node)
         elif nodeAnnotation != None:
-            G.add_node(node, popup = ("On a scale of 0 to 1, the normalized average of mRNA sequencing activity of this gene compared to all other genes in this pathway is: " + str(nodeAnnotation[(node + datatype)])), label = node) # Adds an annotation using data gathered from fbget
+            #G.add_node(node, popup = ("On a scale of 0 to 1, the normalized average of mRNA sequencing activity of this gene compared to all other genes in this pathway is: " + str(nodeAnnotation[(node + datatype)])), label = node)
+            G.add_node(node, popup = ("The p-value of a t-test for this protein's mRNA activity for normal tissue vs cancerous tissue is: " + str(nodeAnnotation[(node + datatype)])), label = node)
+            # Adds an annotation using data gathered from fbget
 
         #Adding style to the node
         if node_symbol == "tf":
@@ -157,8 +171,9 @@ def NetPath_GraphSpace(genPathway, genNode, graphName, graphDescription, nameCho
             G.add_node_style(node, shape = 'rectangle', color = nodeAnnotation[(node + "huevalue")], width = 90, height = 90)
         else:
             G.add_node_style(node, shape = 'ellipse', color = nodeAnnotation[(node + "huevalue")], width = 90, height = 90)
-
-
+     #Initializing variables
+     edgeCheck = []
+     #Initialized.
      for edgecounter in range(len(genPathway)):
         if nameChoice == "Uniprot":
             node1 = genPathway[edgecounter][0]
@@ -167,22 +182,27 @@ def NetPath_GraphSpace(genPathway, genNode, graphName, graphDescription, nameCho
             #node1 = genPathway[edgecounter][0] #Reads out in Uniprot
             #node2 = genPathway[edgecounter][1]
             node1 = namedict[genPathway[edgecounter][0]] #Missing the Uniprot key
-            node2 = namedict[genPathway[edgecounter][1]]
-        lineweight = nodeAnnotation[node1 + node2 + "lineweight"]
+            node2 = namedict[genPathway[edgecounter][1]] #1 if normal, 2 is TieDIE
+        #lineweight = nodeAnnotation[node1 + node2 + "lineweight"] #PLACEHOLDER, use for width variable below
         #print("node1 is: ", node1) #DB
         #print("node2 is: ", node2) #DB
 
-        edgetype = genPathway[edgecounter][2]
+        edgetype = genPathway[edgecounter][2] #2 if normal, 1 if TieDIE
+
+        #Checks if an edge has already been added.
+        edgeCheck.append(node1 + node2)
+        if (node2 + node1) in edgeCheck:
+            continue
 
         if edgetype == "Phosphorylation":
             G.add_edge(node1, node2, directed = True, popup = "Phosphorylation interaction.")
-            G.add_edge_style(node1, node2, directed = True, width = lineweight, edge_style = "solid", color = "yellow")
+            G.add_edge_style(node1, node2, directed = True, width = 1, edge_style = "solid", color = "yellow")
         elif edgetype == "Dephosphorylation":
             G.add_edge(node1, node2, directed = True, popup = "Dephosphorylation interaction")
-            G.add_edge_style(node1, node2, directed = True, width = lineweight, edge_style = "solid", color = "red")
+            G.add_edge_style(node1, node2, directed = True, width = 1, edge_style = "solid", color = "red")
         else:
             G.add_edge(node1, node2, directed = False, popup = "Physical connection")
-            G.add_edge_style(node1, node2, directed = False, width = lineweight, edge_style = "solid")
+            G.add_edge_style(node1, node2, directed = False, width = 1, edge_style = "solid")
 
      #Uploading graph to Graphspace
      from graphspace_python.api.client import GraphSpace

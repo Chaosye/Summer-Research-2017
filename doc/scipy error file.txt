@@ -1,0 +1,29 @@
+What have I been doing to install SciPy?
+
+First, tried doing the usual pip --user install for:
+pip install --user numpy scipy matplotlib ipython jupyter pandas sympy nose
+which didn't work, so I just did pip install for each of those individually.
+Trying to use the stats module of scipy let to do this error:
+====
+ImportError: No module named _ufuncs
+nicegan@bioinf3:~/Desktop/Summer-Research-2017/src$ python firehoseNode.py
+Traceback (most recent call last):
+  File "firehoseNode.py", line 42, in <module>
+    from scipy import stats
+  File "../packages/scipy/stats/__init__.py", line 338, in <module>
+
+  File "../packages/scipy/stats/stats.py", line 180, in <module>
+  File "../packages/scipy/special/__init__.py", line 627, in <module>
+====
+Tried uninstalling all of the above modules and trying it out again, but scipy was not able to be uninstalled due to "PermissionError: [Errno 13] Permission denied: 'dependency_links.txt'"
+
+After removing the scipy file physically, and installing it from https://sourceforge.net/projects/scipy/files/the then placing it into my .local directory and project directory, this new error appears:
+====
+ImportError: Error importing scipy: you cannot import scipy while
+        being in scipy source directory; please exit the scipy source
+        tree first, and relaunch your python intepreter.
+====
+Cannot uninstall, so trying to upgrade instead with pip install --upgrade --user numpy scipy matplotlib ipython jupyter pandas sympy nose
+and then copying it to my packages folder.
+====
+Learned about bash!  Realized I was using a broken version of numpy that was copying incorrectly to the packages dir.  Some modules like graphspace are downloading to py3.4 
